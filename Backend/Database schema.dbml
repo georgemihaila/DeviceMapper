@@ -1,0 +1,44 @@
+Table LocationData {
+  ID int [pk, increment]
+  Latitude Decimal(8,6) [not null]
+  Longitude Decimal(9,6) [not null]
+}
+
+Table WiFiNetworks {
+  ID int [pk, increment]
+  SSID varchar(32)
+  Security varchar
+  Channel int
+  BSSID varchar(17) [unique]
+  Type varchar
+  Capabilities varchar(max)
+}
+
+Table WiFiSpots {
+  ID int [pk, increment]
+  Network int [not null]
+  Location int
+  Date datetime [not null]
+}
+
+Ref: WiFiSpots.Network > WiFiNetworks.ID
+Ref: WiFiSpots.Location > LocationData.ID
+
+Table BluetoothDevices {
+  ID int [pk, increment]
+  Name varchar
+  MAC varchar(17) [unique]
+  Type varchar
+  ManufacturerData varchar
+  ServiceUUID varchar
+}
+
+Table BluetoothSpots {
+  ID int [pk, increment]
+  Device int [not null]
+  Location int
+  Date datetime [not null]
+}
+
+Ref: BluetoothSpots.Device > BluetoothDevices.ID
+Ref: BluetoothSpots.Location > LocationData.ID
