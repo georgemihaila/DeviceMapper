@@ -1,0 +1,37 @@
+#include "Arduino.h"
+#include "CustomWiFiConnection.h"
+//#include "BluetoothScanner.h"
+#include "LEDBlinker.h"
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
+
+//Initialize services as pointers and instantiate them after the safety delay
+CustomWiFiConnection* wifiConnection;
+//BluetoothScanner* bluetoothScanner;
+LEDBlinker ledBlinker(4);
+
+void setup(){
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+  Serial.begin(115200);
+  while(!Serial){
+    ; // wait for serial port to connect
+  }
+  Serial.println("Started");
+  for (int i = 0; i < 6; i++){ //Safety delay
+    ledBlinker.invertState();
+    delay(500);
+  }
+  Serial.println("WiFi init");
+  wifiConnection = new CustomWiFiConnection();
+  Serial.println("BT init");
+  //bluetoothScanner = new BluetoothScanner(5);
+}
+
+void loop(){
+    Serial.println("WiFi keep-alive");
+    wifiConnection->keepAlive();
+    Serial.println("BT keep-alive");
+    //bluetoothScanner->keepAlive();
+    ledBlinker.invertState();
+    delay(500);
+}

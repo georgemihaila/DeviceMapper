@@ -3,7 +3,7 @@
 #include <BLEUtils.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
-#include <Arduino.h>
+#include "Arduino.h"
 
 BLEScan* __pBLEScan;
 int _scanTime;
@@ -21,7 +21,7 @@ BluetoothScanner::BluetoothScanner(int scanTime){
     _pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
     _pBLEScan->setActiveScan(true); //active scan uses more power, but get results faster
     _pBLEScan->setInterval(100);
-    _pBLEScan->setWindow(99);  // less or equal setInterval value
+    _pBLEScan->setWindow(160);  // less or equal setInterval value
 }
 
 void BluetoothScanner::keepAlive(){

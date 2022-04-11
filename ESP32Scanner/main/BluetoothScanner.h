@@ -1,7 +1,7 @@
 #ifndef BluetoothScanner_h
 #define BluetoothScanner_h
 #include <BLEScan.h>
-#include "../Service.h"
+#include "Service.h"
 
 class BluetoothScanner : public IService
 {
