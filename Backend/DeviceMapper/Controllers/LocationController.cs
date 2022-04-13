@@ -12,12 +12,8 @@ namespace DeviceMapper.Controllers
 {
     [ApiController]
     [Route("[controller]")]
-    public class LocationController : ControllerWithContext
+    public class LocationController : ControllerBase
     {
-        public LocationController(DeviceMapperContext context) : base(context)
-        {
-        }
-
         [HttpPost]
         [Route("[action]")]
         public IActionResult UpdateLocation()

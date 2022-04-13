@@ -75,6 +75,8 @@ namespace DeviceMapper.Infra.Database
                 entity.Property(e => e.Latitude).HasColumnType("decimal(8, 6)");
 
                 entity.Property(e => e.Longitude).HasColumnType("decimal(9, 6)");
+
+                entity.Property(e => e.Altitude).HasColumnType("decimal(7, 2)");
             });
 
             modelBuilder.Entity<WiFiNetwork>(entity =>

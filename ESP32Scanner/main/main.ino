@@ -2,6 +2,7 @@
 #include "CustomWiFiConnection.h"
 #include "BluetoothScanner.h"
 #include "LEDBlinker.h"
+#include "Service.h"
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 
@@ -14,6 +15,11 @@ static CustomWiFiConnection* wifiConnection;
 static BluetoothScanner* bluetoothScanner;
 LEDBlinker ledBlinker(4);
 
+IService services[2] = {
+  CustomWiFiConnection(),
+  BluetoothScanner(5)
+};
+
 void setup(){
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
   Serial.begin(115200);
@@ -22,17 +28,12 @@ void setup(){
     ledBlinker.invertState();
     delay(500);
   }
-  Serial.println("WiFi init");
-  wifiConnection = new CustomWiFiConnection();
-  Serial.println("BT init");
-  bluetoothScanner = new BluetoothScanner(5);
 }
 
 void loop(){
-    Serial.println("WiFi keep-alive");
-    wifiConnection->keepAlive();
-    Serial.println("BT keep-alive");
-    bluetoothScanner->keepAlive();
+    for (int i = 0; i < 2; i++) {
+      services[i].keepAlive();
+    }
     ledBlinker.invertState();
     delay(500);
 }

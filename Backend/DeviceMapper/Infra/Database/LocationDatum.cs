@@ -16,6 +16,7 @@ namespace DeviceMapper.Infra.Database
         public int Id { get; set; }
         public decimal Latitude { get; set; }
         public decimal Longitude { get; set; }
+        public decimal Altitude { get; set; }
 
         public virtual ICollection<BluetoothSpot> BluetoothSpots { get; set; }
         public virtual ICollection<WiFiSpot> WiFiSpots { get; set; }

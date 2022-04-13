@@ -1,0 +1,237 @@
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEScan.h>
+#include <BLEAdvertisedDevice.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+
+#define ESP_AUTO_RESTART_TIME_MS 180000 //Restart every 3 minutes just in case
+#define EXTERNAL_LED 13
+
+//How many unique devices to store before sending data to server
+#define COLLECT_UNIQUE_SIZE 50
+
+//If the queue doesn't fill up in this amount of time (ms), send the data anyway
+#define BLUETOOTH_SEND_DATA_EVERY_MS 5000
+long lastDataSentMs = 0;
+int lastSendIndex = 0;
+
+String collectedBluetoothDevices[COLLECT_UNIQUE_SIZE];
+int collectedBluetoothDeviceCount = 0;
+
+void sendBluetoothData(){
+  sendQueueData(collectedBluetoothDevices, collectedBluetoothDeviceCount, lastSendIndex, lastDataSentMs, "Bluetooth/ProcessRawString", "Bluetooth");
+}
+
+#define WIFI_SEND_DATA_EVERY_MS 5000
+long lastWiFiDataSentMs = 0;
+int lastWiFiSendIndex = 0;
+
+String collectedWiFiDevices[COLLECT_UNIQUE_SIZE];
+int collectedWiFiDeviceCount = 0;
+
+void sendWiFiData(){
+  sendQueueData(collectedWiFiDevices, collectedWiFiDeviceCount, lastWiFiSendIndex, lastWiFiDataSentMs, "WiFi/ProcessRawString", "WiFi");
+}
+
+long lastSendAnyMs = 0;
+#define WIFI_NO_SEND_DISCONNECT_TIME_MS 30000
+
+String serverName = "http://pds.cce.sh/";
+WiFiClient client;
+HTTPClient http;
+
+void makeSureWiFiConnectionUp(){
+  if (WiFi.status() != WL_CONNECTED){
+    initWiFi();
+  }
+}
+
+void sendQueueData(String data[], int dataCount, int& lastSendIndex, long& lastDataSentMs, String path, String dataType){
+  makeSureWiFiConnectionUp();
+  Serial.println("Sending data...");
+  if (lastSendIndex > dataCount) //Queue has filled in the meantime
+  {
+    lastSendIndex = 0;
+  }
+  
+  for (int i = lastSendIndex; i < dataCount; i++){
+    bool ok = false;
+    for (int retryCount = 0; retryCount < 3 && !ok; retryCount++){
+    Serial.print("Sending " + dataType + " data...");
+    String serverPath = serverName + path;
+    http.begin(client, serverPath);
+    http.addHeader("Content-Type", "application/json");
+    String message = "\"" + data[i] + "\"";
+    int httpResponseCode = http.POST(message);
+    //Serial.println(message);
+    if (httpResponseCode == 201) {
+      //All good
+      Serial.println(" [OK]");
+      ok = true;
+    }
+    else if (httpResponseCode < 0){ //ESP error?
+      Serial.println(" [ESP ERROR][" + String(retryCount + 1) + "]");
+    }
+    else {
+      Serial.print("HTTP response code: ");
+      Serial.print(httpResponseCode);
+      Serial.println(" [" + String(retryCount + 1) + "]");
+    }
+    if (!ok){ //Wait a bit
+      delay(250);
+    }
+    // Free resources
+    http.end();
+    }
+  }
+    lastDataSentMs = millis();
+    lastSendIndex = dataCount;
+    lastSendAnyMs = millis();
+    /*
+    WiFi.disconnect();
+    Serial.println("WiFi disconnected");*/
+}
+
+int sessionBTDevices = 0;
+int sessionWiFiNetworks = 0;
+
+void addDeviceToListIfNewAndSendDataIfQueueFull(String (&collectedDevices)[COLLECT_UNIQUE_SIZE], int& collectedDeviceCount, int& sessionDevices, String deviceData, String deviceType, void (&sendFunction)()){
+  for (int i = 0; i < collectedDeviceCount; i++){
+    if (collectedDevices[i].equals(deviceData)){
+      return;
+    }
+  }
+  collectedDevices[collectedDeviceCount++] = deviceData;
+  sessionDevices++;
+  Serial.println("New " + deviceType + " device found. Session total: " + String(sessionDevices));
+  if (collectedDeviceCount == COLLECT_UNIQUE_SIZE){
+    sendFunction();
+    collectedDeviceCount = 0; //Start over, keep queue for comparison
+  }
+}
+
+void addBluetoothDeviceIfNewAndSendDataIfQueueFull(String data){
+  addDeviceToListIfNewAndSendDataIfQueueFull(collectedBluetoothDevices, collectedBluetoothDeviceCount, sessionBTDevices, data, "Bluetooth", sendBluetoothData);
+}
+
+void addWiFiDeviceIfNewAndSendDataIfQueueFull(String data){
+  addDeviceToListIfNewAndSendDataIfQueueFull(collectedWiFiDevices, collectedWiFiDeviceCount, sessionWiFiNetworks, data, "WiFi", sendWiFiData);
+}
+
+int scanTime = 3; //In seconds
+BLEScan* pBLEScan;
+
+class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
+    void onResult(BLEAdvertisedDevice advertisedDevice) {
+      String data = String(advertisedDevice.toString().c_str());
+      addBluetoothDeviceIfNewAndSendDataIfQueueFull(data);
+    }
+};
+
+void initWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  while (WiFi.status() != WL_CONNECTED){
+    Serial.println("Scanning for known networks...");
+    int n = WiFi.scanNetworks();
+    String connectTo = "";
+    String password = "";
+    for (int i = 0; i < n; ++i) {
+      if (WiFi.SSID(i).equals("CCE_24")){
+        connectTo = "CCE_24";
+        password = "CrazyCatException";
+        break;
+      }
+      else if (WiFi.SSID(i).equals("IoT")){
+        connectTo = "IoT";
+        password = "IoTPassword8888+";
+        break;
+      }
+    }
+    if (!connectTo.equals("")){
+      Serial.println("Connecting to " + connectTo);
+      WiFi.begin(connectTo.c_str(), password.c_str());
+      int c = 0;
+      while (WiFi.status() != WL_CONNECTED) {
+        Serial.print('.');
+        delay(500);
+        c++;
+        if (c >= 5 * 1000 / 500){
+          Serial.print("\nCouldn't connect");
+          break;
+        }
+      }
+      Serial.println();
+    }
+  }
+  Serial.println(WiFi.localIP());
+}
+
+char HexLookUp[] = "0123456789abcdef";
+String bssidToString(uint8_t *bssid){
+  String result;
+  for (int i = 0; i < 6; i++){
+    if (i % 2 == 1){
+      result += ":";
+    }
+    result += HexLookUp[bssid[i] >> 4];
+    result += HexLookUp[bssid[i] & 0x0F];
+  }
+  return result;
+}
+
+void wiFiScan(){
+  int n = WiFi.scanNetworks();
+  for (int i = 0; i < n; ++i){
+    String data = String(WiFi.SSID(i));
+    data += "," + String(WiFi.encryptionType(i));
+    data += "," + String(WiFi.channel(i));
+    data += "," + String(bssidToString(WiFi.BSSID(i)));
+    addWiFiDeviceIfNewAndSendDataIfQueueFull(data);
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("ESP32 up");
+  //initWiFi();
+  BLEDevice::init("ESP32 Scanner");
+  pBLEScan = BLEDevice::getScan(); //create new scan
+  pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
+  pBLEScan->setActiveScan(true); //active scan uses more power, but get results faster
+  pBLEScan->setInterval(100);
+  pBLEScan->setWindow(99);  // less or equal setInterval value
+  pinMode(EXTERNAL_LED, OUTPUT);
+  digitalWrite(EXTERNAL_LED, HIGH);
+}
+
+void loop() {
+  Serial.println("[BT][" + String(millis()) + "]");
+  BLEScanResults foundDevices = pBLEScan->start(scanTime, false);
+  pBLEScan->clearResults();   // delete results fromBLEScan buffer to release memory
+  if (millis() - lastDataSentMs > BLUETOOTH_SEND_DATA_EVERY_MS){ //Enough time elapsed for an autosend
+    if (lastSendIndex < collectedBluetoothDeviceCount){ //New Bluetooth devices added since last send
+      Serial.println("Doing Bluetooth autosend");
+      sendBluetoothData();
+    }
+  }
+  Serial.println("[WiFi][" + String(millis()) + "]");
+  wiFiScan();
+  if (millis() - lastWiFiDataSentMs > WIFI_SEND_DATA_EVERY_MS){ //Enough time elapsed for an autosend
+    if (lastWiFiSendIndex < collectedWiFiDeviceCount){ //New WiFi devices added since last send
+      Serial.println("Doing WiFi autosend");
+      sendWiFiData();
+    }
+  }
+  if (millis() - lastSendAnyMs > WIFI_NO_SEND_DISCONNECT_TIME_MS){ //Nothing sent in this interval, disconnect WiFi
+    if (WiFi.status() == WL_CONNECTED){
+      WiFi.disconnect();
+      Serial.println("WiFi auto disconnected because of inactivity");
+    }
+  }
+  if (millis() >= ESP_AUTO_RESTART_TIME_MS){
+    Serial.println("Auto restart triggered");
+    ESP.restart();
+  }
+}

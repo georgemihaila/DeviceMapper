@@ -5,6 +5,7 @@ using NetTelegramBotApi.Types;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -20,6 +21,8 @@ namespace DeviceMapper.Infra
         private readonly string _channelName;
         private Chat _chat;
         private DateTime _lastMessageSentAt = DateTime.MinValue;
+        private long _pinnedMessageID = -1;
+
         private GetChat _getChat
         {
             get
@@ -77,7 +80,7 @@ namespace DeviceMapper.Infra
             return await _telegramBot.MakeRequestAsync(sendMessage);
         }
 
-        public async Task<Message> SendMessageIfSoonEnoughAsync(string text)
+        private async Task<Message> SendMessageIfSoonEnoughAsync(string text)
         {
             var message = default(Message);
             if (DateTime.Now - _lastMessageSentAt > TimeSpan.FromSeconds(1))
@@ -86,6 +89,38 @@ namespace DeviceMapper.Infra
                 _lastMessageSentAt = DateTime.Now;
             }
             return message;
+        }
+
+        Dictionary<int, string> _lineNumberDictionary = new Dictionary<int, string>();
+        Dictionary<int, List<string>> _lineNumberListDictionary = new Dictionary<int, List<string>>();
+
+        public async Task<Message> CreateOrEditLastMessageAsync(string text, int lineOrGroupNumber, bool useList = false)
+        {
+            if (_pinnedMessageID == -1)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1));
+                var message = await SendMessageAsync(text);
+                _pinnedMessageID = message.MessageId;
+            }
+            if (DateTime.Now - _lastMessageSentAt > TimeSpan.FromSeconds(1))
+            {
+                _lastMessageSentAt = DateTime.Now;
+                if (useList)
+                {
+                    if (!_lineNumberListDictionary.ContainsKey(lineOrGroupNumber) || _lineNumberListDictionary[lineOrGroupNumber].Count >= 10)
+                    {
+                        _lineNumberListDictionary[lineOrGroupNumber] = new List<string>();
+                    }
+                    _lineNumberListDictionary[lineOrGroupNumber].Add(text);
+                    return await EditMessageAsync(_pinnedMessageID, string.Join("\n\n", _lineNumberListDictionary.OrderBy(x => x.Key).Select(x => string.Join("\n", x.Value))));
+                }
+                else
+                {
+                    _lineNumberDictionary[lineOrGroupNumber] = text;
+                    return await EditMessageAsync(_pinnedMessageID, string.Join("\n\n", _lineNumberDictionary.OrderBy(x => x.Key).Select(x => string.Join("\n", x.Value))));
+                }
+            }
+            return null;
         }
 
         public async Task<Message> EditMessageAsync(long messageID, string text)
