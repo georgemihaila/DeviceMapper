@@ -18,6 +18,8 @@ namespace DeviceMapper.Controllers
     public class BluetoothController : CustomController
     {
         private static CircularList<string> _latestEntries = new CircularList<string>(20);
+        private static int _sessionNew = 0;
+        private static int _sessionUpdated = 0;
 
         public BluetoothController(DeviceMapperContext context, TelegramBot telegramBot) : base(context, telegramBot, 2)
         {
@@ -31,7 +33,8 @@ namespace DeviceMapper.Controllers
             var bottom = $"\n\nTotal: {Context.BluetoothDevices.Count()} Bluetooth devices ({DateTime.Now:HH:mm:sstt})\n";
             var groups = data.Split(',');
             var location = GetOrCreateLocation(groups.AtOrEmpty(0), groups.AtOrEmpty(1), groups.AtOrEmpty(2));
-            var locationString = string.Empty;
+            var locationString = groups.AtOrEmpty(0) + groups.AtOrEmpty(1) + groups.AtOrEmpty(2);
+            var shouldSendMessage = false;
             if (location.Id != 1)
             {
                 locationString = $" [Lo: {location.Longitude}, La: {location.Latitude}, Al: {location.Altitude}]";
@@ -56,7 +59,8 @@ namespace DeviceMapper.Controllers
             {
                 Context.BluetoothDevices.Add(device);
                 _latestEntries.Add($"{device.Name}[{device.Mac}] discovered{locationString}");
-                await CreateOrEditLastMessageAsync(string.Join("\n", _latestEntries) + bottom);
+                _sessionNew++;
+                shouldSendMessage = true;
             }
             else
             {
@@ -86,7 +90,8 @@ namespace DeviceMapper.Controllers
                 {
                     Context.Update(target);
                     _latestEntries.Add($"{device.Name}[{device.Mac}] updated{locationString}");
-                    await CreateOrEditLastMessageAsync(string.Join("\n", _latestEntries) + bottom);
+                    _sessionUpdated++;
+                    shouldSendMessage = true;
                 }
             }
             Context.SaveChanges();
@@ -98,6 +103,10 @@ namespace DeviceMapper.Controllers
                 Location = location.Id
             });
             Context.SaveChanges();
+            if (shouldSendMessage)
+            {
+                await CreateOrEditLastMessageAsync(string.Join("\n", _latestEntries) + bottom + $"Session: {_sessionNew} new, {_sessionUpdated} updated\n");
+            }
             return StatusCode(201);
         }
     }

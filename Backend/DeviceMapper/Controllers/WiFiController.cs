@@ -18,6 +18,8 @@ namespace DeviceMapper.Controllers
     public class WiFiController : CustomController
     {
         private static CircularList<string> _latestEntries = new CircularList<string>(20);
+        private static int _sessionNew = 0;
+        private static int _sessionUpdated = 0;
 
         public WiFiController(DeviceMapperContext context, TelegramBot telegramBot) : base(context, telegramBot, 1)
         {
@@ -38,7 +40,8 @@ namespace DeviceMapper.Controllers
             var bottom = $"\n\nTotal: {Context.WiFiNetworks.Count()} WiFi networks ({DateTime.Now:HH:mm:sstt})\n";
             var groups = data.Split(',');
             var location = GetOrCreateLocation(groups.AtOrEmpty(4), groups.AtOrEmpty(5), groups.AtOrEmpty(6));
-            var locationString = string.Empty;
+            var locationString = groups.AtOrEmpty(4) + groups.AtOrEmpty(5) + groups.AtOrEmpty(6);
+            var shouldSendMessage = false;
             if (location.Id != 1)
             {
                 locationString = $" [Lo: {location.Longitude}, La: {location.Latitude}, Al: {location.Altitude}]";
@@ -50,11 +53,12 @@ namespace DeviceMapper.Controllers
                 Channel = int.Parse(groups.AtOrEmpty(2)),
                 Bssid = groups.AtOrEmpty(3)
             };
-            if (!Context.WiFiNetworks.Any(x => x.Ssid == wifiNetwork.Ssid))
+            if (!Context.WiFiNetworks.Any(x => x.Bssid == wifiNetwork.Bssid))
             {
                 Context.WiFiNetworks.Add(wifiNetwork);
                 _latestEntries.Add($"{wifiNetwork.Ssid}[{wifiNetwork.Bssid}] discovered{locationString}");
-                await CreateOrEditLastMessageAsync(string.Join("\n", _latestEntries) + bottom);
+                _sessionNew++;
+                shouldSendMessage = true;
             }
             else
             {
@@ -75,16 +79,12 @@ namespace DeviceMapper.Controllers
                     target.Channel = wifiNetwork.Channel;
                     updated = true;
                 }
-                if (target.Bssid != wifiNetwork.Bssid)
-                {
-                    target.Bssid = wifiNetwork.Bssid;
-                    updated = true;
-                }
                 if (updated)
                 {
                     Context.Update(target);
                     _latestEntries.Add($"{wifiNetwork.Ssid}[{wifiNetwork.Bssid}] updated{locationString}");
-                    await CreateOrEditLastMessageAsync(string.Join("\n", _latestEntries) + bottom);
+                    _sessionUpdated++;
+                    shouldSendMessage = true;
                 }
             }
             Context.SaveChanges();
@@ -96,6 +96,10 @@ namespace DeviceMapper.Controllers
                 Location = location.Id
             });
             Context.SaveChanges();
+            if (shouldSendMessage)
+            {
+                await CreateOrEditLastMessageAsync(string.Join("\n", _latestEntries) + bottom + $"Session: {_sessionNew} new, {_sessionUpdated} updated\n");
+            }
             return StatusCode(201);
         }
     }
